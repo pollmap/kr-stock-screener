@@ -358,9 +358,10 @@ def main():
         
         filepath = exporter.export_all(
             financial_data=financial_data,
-            market_data=market_cap_df,  # 시장데이터 통합
-            ratio_data=ratio_data,       # 재무비율 추가
-            macro_data=macro_data,
+            market_data=market_cap_df,
+            ratio_data=ratio_data,
+            macro_kr_data=macro_kr_data,      # BOK 한국 데이터
+            macro_global_data=macro_global_data,  # FRED 글로벌 데이터
             stock_list=stock_list,
             filename=args.output
         )
@@ -380,8 +381,11 @@ def main():
     print(f"\n📂 출력 파일: {filepath}")
     print("\n💡 사용 팁:")
     print("  • 엑셀에서 '데이터 > 필터'로 조건 검색")
-    print("  • '📚 활용가이드' 시트에서 사용법 확인")
+    print("  • '📚 활용가이드' 시트에서 스크리닝 전략 확인")
     print("  • '📈 재무비율' 시트에서 60개+ 지표 확인")
+    print("  • '⭐ Top Picks' 시트에서 자동 필터링된 우량주 확인")
+    print("  • '💰 DCF 계산기' 시트로 내재가치 산정")
+
 
 
 
