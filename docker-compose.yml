@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # PostgreSQL + TimescaleDB (시계열 확장)
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: cufa_db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: cufa
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cufa2026}
+      POSTGRES_DB: screener
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U cufa -d screener" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 캐싱
+  redis:
+    image: redis:7-alpine
+    container_name: cufa_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    command: redis-server --appendonly yes
+
+  # FastAPI 백엔드
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: cufa_api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://cufa:${DB_PASSWORD:-cufa2026}@db:5432/screener
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./api:/app/api
+      - ./core:/app/core
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Streamlit 웹 UI
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: cufa_web
+    ports:
+      - "8501:8501"
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      - api
+    volumes:
+      - ./web:/app/web
+    command: streamlit run web/app.py --server.port=8501 --server.address=0.0.0.0
+  # Airflow 스케줄러 (선택적)
+  # scheduler:
+  #   image: apache/airflow:2.8.0
+  #   container_name: cufa_scheduler
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - ./dags:/opt/airflow/dags
+  #   environment:
+  #     AIRFLOW__CORE__EXECUTOR: LocalExecutor
+
+volumes:
+  pgdata:
+  redisdata:
+
+
+networks:
+  default:
+    name: cufa_network
