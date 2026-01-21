@@ -1,0 +1,24 @@
+# API 키 설정 파일 템플릿
+# 
+# 📌 사용 방법:
+# 1. 이 파일을 복사하여 api_keys.yaml로 저장
+# 2. 각 API 키를 본인의 키로 교체
+#
+# 📌 API 키 발급처:
+# - OpenDART: https://opendart.fss.or.kr (무료, 일 10,000건)
+# - 한국은행: https://ecos.bok.or.kr (무료)
+# - FRED: https://fred.stlouisfed.org (무료)
+
+opendart:
+  api_key: "YOUR_OPENDART_API_KEY_HERE"
+  
+bok:
+  api_key: "YOUR_BOK_API_KEY_HERE"
+
+fred:
+  api_key: "YOUR_FRED_API_KEY_HERE"
+
+# 선택사항 (한국투자증권 실시간 시세)
+kis:
+  app_key: "YOUR_KIS_APP_KEY_HERE"
+  app_secret: "YOUR_KIS_APP_SECRET_HERE"

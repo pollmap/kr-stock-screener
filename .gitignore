@@ -1,0 +1,31 @@
+# API 키 (민감 정보)
+config/api_keys.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+
+# 출력 파일
+outputs/*.xlsx
+outputs/*.csv
+
+# 캐시
+cache/
+
+# 로그
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,28 @@
+# 국내 주식 재무데이터 수집 시스템 의존성 (Pro-Level)
+
+# 데이터 처리
+pandas>=2.0.0
+numpy>=1.24.0
+
+# 엑셀 출력
+openpyxl>=3.1.0
+
+# HTTP 요청
+requests>=2.31.0
+
+# 설정 파일
+pyyaml>=6.0
+
+# 주식 데이터 수집
+finance-datareader>=0.9.50
+pykrx>=1.0.45
+
+# 진행률 표시
+tqdm>=4.65.0
+
+# 콘솔 색상
+colorama>=0.4.6
+
+# 선택적 (권장)
+# opendartreader>=0.2.0
+# fredapi>=0.5.0
