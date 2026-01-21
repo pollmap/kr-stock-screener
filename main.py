@@ -279,37 +279,20 @@ def main():
 
     
     # =====================================
-    # 11. 한국 경제지표 수집
+    # 11. 한국 경제지표 수집 (최신값만)
     # =====================================
     macro_kr_data = None
     if bok:
         tracker.start_step("한국 경제지표 수집", 30)
         
         try:
-            kr_categories = []
-            if screening.kr_interest_rate: kr_categories.append('금리')
-            if screening.kr_inflation: kr_categories.append('물가')
-            if screening.kr_exchange_rate: kr_categories.append('환율')
-            if screening.kr_trade: kr_categories.append('무역')
-            if screening.kr_employment: kr_categories.append('고용')
-            if screening.kr_sentiment: kr_categories.append('경기')
-            if screening.kr_money_supply: kr_categories.append('통화')
-            
-            start_year = min(args.years)
-            end_year = max(args.years)
-            
-            if kr_categories:
-                macro_kr_data = bok.collect_all_indicators(
-                    f"{start_year}01", f"{end_year}12",
-                    categories=kr_categories
-                )
-                if macro_kr_data is not None and not macro_kr_data.empty:
-                    tracker.update(len(macro_kr_data))
-                    tracker.finish_step(f"{len(macro_kr_data):,}건 수집")
-                else:
-                    tracker.finish_step("데이터 없음")
+            # 최신값만 수집 (시계열 X)
+            macro_kr_data = bok.collect()
+            if macro_kr_data is not None and not macro_kr_data.empty:
+                tracker.update(len(macro_kr_data))
+                tracker.finish_step(f"{len(macro_kr_data):,}개 지표")
             else:
-                tracker.skip_step("한국 경제지표", "설정에서 제외됨")
+                tracker.finish_step("데이터 없음")
         except Exception as e:
             logger.error(f"한국경제 오류: {e}")
             tracker.finish_step("수집 실패")
@@ -317,36 +300,20 @@ def main():
         tracker.skip_step("한국 경제지표", "설정에서 제외됨")
     
     # =====================================
-    # 12. 글로벌 경제지표 수집
+    # 12. 글로벌 경제지표 수집 (최신값만)
     # =====================================
     macro_global_data = None
     if fred:
         tracker.start_step("글로벌 경제지표 수집", 50)
         
         try:
-            global_categories = []
-            if screening.us_rates: global_categories.append('미국금리')
-            if screening.volatility: global_categories.append('변동성')
-            if screening.commodities: global_categories.append('원자재')
-            if screening.global_fx: global_categories.append('환율')
-            if screening.credit_spread: global_categories.append('신용스프레드')
-            if screening.global_equity: global_categories.append('주식')
-            
-            start_year = min(args.years)
-            end_year = max(args.years)
-            
-            if global_categories:
-                macro_global_data = fred.collect_all_indicators(
-                    f"{start_year}-01-01", f"{end_year}-12-31",
-                    categories=global_categories
-                )
-                if macro_global_data is not None and not macro_global_data.empty:
-                    tracker.update(len(macro_global_data))
-                    tracker.finish_step(f"{len(macro_global_data):,}건 수집")
-                else:
-                    tracker.finish_step("데이터 없음")
+            # 최신값만 수집 (시계열 X)
+            macro_global_data = fred.collect()
+            if macro_global_data is not None and not macro_global_data.empty:
+                tracker.update(len(macro_global_data))
+                tracker.finish_step(f"{len(macro_global_data):,}개 지표")
             else:
-                tracker.skip_step("글로벌 경제지표", "설정에서 제외됨")
+                tracker.finish_step("데이터 없음")
         except Exception as e:
             logger.error(f"글로벌경제 오류: {e}")
             tracker.finish_step("수집 실패")
@@ -356,16 +323,33 @@ def main():
     # 거시경제 병합
     macro_parts = []
     if macro_kr_data is not None and not macro_kr_data.empty:
-        macro_kr_data['source'] = 'BOK'
         macro_parts.append(macro_kr_data)
     if macro_global_data is not None and not macro_global_data.empty:
-        macro_global_data['source'] = 'FRED'
         macro_parts.append(macro_global_data)
     
     macro_data = pd.concat(macro_parts, ignore_index=True) if macro_parts else None
     
     # =====================================
-    # 13. 엑셀 파일 생성
+    # 13. 재무비율 계산
+    # =====================================
+    ratio_data = None
+    if financial_data is not None and not financial_data.empty:
+        tracker.start_step("재무비율 계산", len(stock_codes))
+        
+        try:
+            from processors.ratio_calculator import calculate_ratios_for_all
+            ratio_data = calculate_ratios_for_all(financial_data, market_cap_df)
+            if ratio_data is not None and not ratio_data.empty:
+                tracker.update(len(ratio_data))
+                tracker.finish_step(f"{len(ratio_data):,}건 계산")
+            else:
+                tracker.finish_step("계산 데이터 없음")
+        except Exception as e:
+            logger.error(f"재무비율 오류: {e}")
+            tracker.finish_step("계산 실패")
+    
+    # =====================================
+    # 14. 엑셀 파일 생성
     # =====================================
     tracker.start_step("엑셀 파일 생성", 1)
     
@@ -374,11 +358,10 @@ def main():
         
         filepath = exporter.export_all(
             financial_data=financial_data,
-            price_data=price_data,
-            indicator_data=indicator_data,
+            market_data=market_cap_df,  # 시장데이터 통합
+            ratio_data=ratio_data,       # 재무비율 추가
             macro_data=macro_data,
             stock_list=stock_list,
-            market_cap_df=market_cap_df,
             filename=args.output
         )
         
@@ -390,15 +373,16 @@ def main():
         return
     
     # =====================================
-    # 14. 완료 요약
+    # 15. 완료 요약
     # =====================================
     tracker.show_summary()
     
     print(f"\n📂 출력 파일: {filepath}")
     print("\n💡 사용 팁:")
     print("  • 엑셀에서 '데이터 > 필터'로 조건 검색")
-    print("  • 헤더에 마우스 올리면 지표 설명 표시")
-    print("  • '📚 사용가이드' 시트에서 사용법 확인")
+    print("  • '📚 활용가이드' 시트에서 사용법 확인")
+    print("  • '📈 재무비율' 시트에서 60개+ 지표 확인")
+
 
 
 def parse_args():
