@@ -5,7 +5,7 @@
 메인 실행 파일
 
 특징:
-- 5년치 재무제표 수집
+- 3년치 재무제표 수집
 - 진행상황 표시 + 예상 시간
 - 140+ 지표 (투자 60+ / 한국 30+ / 글로벌 50+)
 - 초보자용 엑셀 주석/가이드
@@ -177,10 +177,10 @@ def main():
         tracker.finish_step("시총 수집 실패")
     
     # =====================================
-    # 8. 재무제표 수집 (5년)
+    # 8. 재무제표 수집 (3년)
     # =====================================
     if dart and (screening.balance_sheet or screening.income_statement):
-        tracker.start_step("재무제표 수집 (5년)", len(stock_codes) * len(args.years))
+        tracker.start_step("재무제표 수집 (3년)", len(stock_codes) * len(args.years))
         
         try:
             years = [str(y) for y in args.years]
