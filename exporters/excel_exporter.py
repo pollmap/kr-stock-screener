@@ -189,6 +189,7 @@ class ExcelExporter:
                 result = result.merge(market_copy[merge_cols].drop_duplicates(), on='Code', how='left')
         
         col_map = {'Code': '종목코드', 'Name': '기업명', 'Market': '시장',
+                   'Sector': '섹터', 'Industry': '산업',
                    'market_cap': '시가총액', 'close': '종가', 'volume': '거래량'}
         result = result.rename(columns={k: v for k, v in col_map.items() if k in result.columns})
         

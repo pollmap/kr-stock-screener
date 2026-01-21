@@ -351,7 +351,8 @@ def calculate_ratios_for_all(financial_df: pd.DataFrame, market_df: pd.DataFrame
         ratios = calculator.calculate_from_stock(stock_data, market_info, code)
         
         if ratios:
-            ratios['종목코드'] = code
+            # 종목코드 6자리 문자열로 통일
+            ratios['종목코드'] = str(code).zfill(6)
             results.append(ratios)
     
     if results:
