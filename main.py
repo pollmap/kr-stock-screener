@@ -14,7 +14,7 @@
     python main.py                              # 전체 수집 (5년)
     python main.py --select financial,indicators # 선택적 수집
     python main.py --interactive                # 대화형 메뉴
-    python main.py --quick                      # 빠른 테스트 (10종목)
+    python main.py --quick                      # 빠른 테스트 (100종목)
 """
 
 import os
@@ -128,8 +128,8 @@ def main():
         stock_codes = stock_list['Code'].tolist()
         
         if args.quick:
-            stock_codes = stock_codes[:10]
-            stock_list = stock_list.head(10)
+            stock_codes = stock_codes[:100]
+            stock_list = stock_list.head(100)
     except Exception as e:
         print(f"❌ 종목 리스트 조회 실패: {e}")
         return
@@ -390,7 +390,7 @@ def parse_args():
                        help='대화형 메뉴 모드')
     
     parser.add_argument('--quick', action='store_true',
-                       help='빠른 테스트 (10종목만)')
+                       help='빠른 테스트 (100종목만)')
     
     parser.add_argument('--check-deps', action='store_true',
                        help='의존성 체크만')

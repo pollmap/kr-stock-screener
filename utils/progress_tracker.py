@@ -25,8 +25,10 @@ class TaskInfo:
     
     @property
     def progress(self) -> float:
-        """진행률 (0~1)"""
-        return self.current / self.total if self.total > 0 else 0
+        """진행률 (0~1, 최대 1)"""
+        if self.total <= 0:
+            return 0
+        return min(self.current / self.total, 1.0)  # 최대 100%
     
     @property
     def elapsed(self) -> float:
@@ -82,10 +84,11 @@ class ProgressTracker:
             return f"{minutes:02d}:{secs:02d}"
     
     def _progress_bar(self, progress: float, width: int = 30) -> str:
-        """진행률 바 생성"""
+        """진행률 바 생성 (최대 100%)"""
+        progress = min(progress, 1.0)  # 100% 초과 방지
         filled = int(width * progress)
         bar = "█" * filled + "░" * (width - filled)
-        pct = progress * 100
+        pct = min(progress * 100, 100.0)
         return f"[{bar}] {pct:5.1f}%"
     
     def start_step(self, step_name: str, total_items: int = 1) -> None:

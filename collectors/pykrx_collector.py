@@ -1,9 +1,7 @@
 """
-pykrx 기반 KRX 데이터 수집기
-- 일별 전 종목 시세
-- 투자지표 (PER, PBR, 배당수익률)
-- 지수 데이터
-- 시가총액
+pykrx 기반 KRX 데이터 수집기 (수정판)
+- 최신 pykrx 컬럼명 대응
+- 어제 날짜 자동 사용 (오늘 데이터 없을 때)
 """
 
 from pykrx import stock
@@ -18,14 +16,8 @@ logger = logging.getLogger("kr_stock_collector.pykrx")
 
 
 class PyKrxCollector(BaseCollector):
-    """
-    pykrx 기반 KRX 데이터 수집기
+    """pykrx 기반 KRX 데이터 수집기"""
     
-    KRX에서 직접 시세, 투자지표, 지수 데이터 수집
-    무료 API, 호출 제한 없음
-    """
-    
-    # 주요 지수 코드
     INDEX_CODES = {
         'KOSPI': '1001',
         'KOSPI200': '1028',
@@ -42,15 +34,15 @@ class PyKrxCollector(BaseCollector):
         )
     
     def _get_valid_date(self, date: str = None) -> str:
-        """유효한 거래일 반환 (주말/공휴일 회피)"""
+        """유효한 거래일 반환 (주말/공휴일/오늘 회피)"""
         if date is None:
-            date = datetime.now().strftime('%Y%m%d')
-        
-        # 날짜 형식 통일 (YYYYMMDD)
-        date = date.replace('-', '')
+            # 오늘이 아닌 어제 사용 (장 마감 후 데이터 확보)
+            dt = datetime.now() - timedelta(days=1)
+        else:
+            date = date.replace('-', '')
+            dt = datetime.strptime(date, '%Y%m%d')
         
         # 주말이면 금요일로
-        dt = datetime.strptime(date, '%Y%m%d')
         if dt.weekday() == 5:  # 토요일
             dt = dt - timedelta(days=1)
         elif dt.weekday() == 6:  # 일요일
@@ -58,22 +50,30 @@ class PyKrxCollector(BaseCollector):
         
         return dt.strftime('%Y%m%d')
     
+    def _normalize_columns(self, df: pd.DataFrame, expected: dict) -> pd.DataFrame:
+        """컬럼명 정규화 (pykrx 버전 변화 대응)"""
+        # 실제 컬럼 확인
+        actual = df.columns.tolist()
+        
+        # 매핑 시도
+        rename_map = {}
+        for target, candidates in expected.items():
+            for cand in candidates:
+                if cand in actual:
+                    rename_map[cand] = target
+                    break
+        
+        if rename_map:
+            df = df.rename(columns=rename_map)
+        
+        return df
+    
     def get_market_ohlcv(
         self,
         date: str = None,
         market: str = "ALL"
     ) -> pd.DataFrame:
-        """
-        특정일 전 종목 시세 조회
-        
-        Args:
-            date: 날짜 (YYYYMMDD 또는 YYYY-MM-DD)
-            market: 'KOSPI', 'KOSDAQ', 'KONEX', 'ALL'
-        
-        Returns:
-            DataFrame with columns:
-            - stock_code, open, high, low, close, volume, value, change, date
-        """
+        """전 종목 시세 조회"""
         date = self._get_valid_date(date)
         
         cache_key = f"ohlcv_{date}_{market}"
@@ -89,8 +89,24 @@ class PyKrxCollector(BaseCollector):
                 return pd.DataFrame()
             
             df = df.reset_index()
-            df.columns = ['stock_code', 'open', 'high', 'low', 'close', 
-                          'volume', 'value', 'change']
+            
+            # 컬럼명 정규화
+            col_map = {
+                'stock_code': ['티커', 'index', '종목코드'],
+                'open': ['시가'],
+                'high': ['고가'],
+                'low': ['저가'],
+                'close': ['종가'],
+                'volume': ['거래량'],
+                'value': ['거래대금'],
+                'change': ['등락률']
+            }
+            df = self._normalize_columns(df, col_map)
+            
+            # 첫 컬럼을 stock_code로
+            if 'stock_code' not in df.columns:
+                df = df.rename(columns={df.columns[0]: 'stock_code'})
+            
             df['date'] = date
             
             self._save_to_cache(cache_key, df.to_dict('records'))
@@ -107,19 +123,7 @@ class PyKrxCollector(BaseCollector):
         date: str = None,
         market: str = "ALL"
     ) -> pd.DataFrame:
-        """
-        전 종목 투자지표 조회 (PER, PBR, 배당수익률)
-        
-        ⚠️ 이 함수가 핵심! OpenDART에서 얻기 어려운 실시간 지표
-        
-        Args:
-            date: 날짜 (YYYYMMDD)
-            market: 시장 구분
-        
-        Returns:
-            DataFrame with columns:
-            - stock_code, bps, per, pbr, eps, div_yield, dps, date
-        """
+        """전 종목 투자지표 조회"""
         date = self._get_valid_date(date)
         
         cache_key = f"fundamental_{date}_{market}"
@@ -135,8 +139,22 @@ class PyKrxCollector(BaseCollector):
                 return pd.DataFrame()
             
             df = df.reset_index()
-            df.columns = ['stock_code', 'bps', 'per', 'pbr', 
-                          'eps', 'div_yield', 'dps']
+            
+            # 컬럼명 정규화
+            col_map = {
+                'stock_code': ['티커', 'index', '종목코드'],
+                'bps': ['BPS'],
+                'per': ['PER'],
+                'pbr': ['PBR'],
+                'eps': ['EPS'],
+                'div_yield': ['DIV', 'DY'],
+                'dps': ['DPS']
+            }
+            df = self._normalize_columns(df, col_map)
+            
+            if 'stock_code' not in df.columns:
+                df = df.rename(columns={df.columns[0]: 'stock_code'})
+            
             df['date'] = date
             
             self._save_to_cache(cache_key, df.to_dict('records'))
@@ -153,17 +171,7 @@ class PyKrxCollector(BaseCollector):
         date: str = None,
         market: str = "ALL"
     ) -> pd.DataFrame:
-        """
-        전 종목 시가총액 조회
-        
-        Args:
-            date: 날짜 (YYYYMMDD)
-            market: 시장 구분
-        
-        Returns:
-            DataFrame with columns:
-            - stock_code, market_cap, volume, value, shares, date
-        """
+        """전 종목 시가총액 조회"""
         date = self._get_valid_date(date)
         
         cache_key = f"cap_{date}_{market}"
@@ -178,8 +186,20 @@ class PyKrxCollector(BaseCollector):
                 return pd.DataFrame()
             
             df = df.reset_index()
-            df.columns = ['stock_code', 'market_cap', 'volume', 
-                          'value', 'shares']
+            
+            # 컬럼명 정규화  
+            col_map = {
+                'stock_code': ['티커', 'index', '종목코드'],
+                'market_cap': ['시가총액'],
+                'volume': ['거래량'],
+                'value': ['거래대금'],
+                'shares': ['상장주식수']
+            }
+            df = self._normalize_columns(df, col_map)
+            
+            if 'stock_code' not in df.columns:
+                df = df.rename(columns={df.columns[0]: 'stock_code'})
+            
             df['date'] = date
             
             self._save_to_cache(cache_key, df.to_dict('records'))
@@ -190,68 +210,9 @@ class PyKrxCollector(BaseCollector):
             self.logger.error(f"시가총액 조회 실패 [{date}]: {e}")
             return pd.DataFrame()
     
-    def get_index_ohlcv(
-        self,
-        ticker: str,
-        start: str,
-        end: str = None
-    ) -> pd.DataFrame:
-        """
-        지수 시세 조회
-        
-        Args:
-            ticker: 지수 코드 (예: '1001' KOSPI, '2001' KOSDAQ)
-            start: 시작일 (YYYYMMDD)
-            end: 종료일
-        
-        Returns:
-            지수 시세 DataFrame
-        """
-        start = start.replace('-', '')
-        if end is None:
-            end = datetime.now().strftime('%Y%m%d')
-        else:
-            end = end.replace('-', '')
-        
-        try:
-            df = stock.get_index_ohlcv(start, end, ticker)
-            df = df.reset_index()
-            df['ticker'] = ticker
-            return df
-            
-        except Exception as e:
-            self.logger.error(f"지수 시세 조회 실패 [{ticker}]: {e}")
-            return pd.DataFrame()
-    
-    def get_index_fundamental(
-        self,
-        ticker: str,
-        start: str,
-        end: str = None
-    ) -> pd.DataFrame:
-        """
-        지수 투자지표 조회 (PER, PBR, 배당수익률)
-        """
-        start = start.replace('-', '')
-        if end is None:
-            end = datetime.now().strftime('%Y%m%d')
-        else:
-            end = end.replace('-', '')
-        
-        try:
-            df = stock.get_index_fundamental(start, end, ticker)
-            df = df.reset_index()
-            df['ticker'] = ticker
-            return df
-            
-        except Exception as e:
-            self.logger.error(f"지수 지표 조회 실패 [{ticker}]: {e}")
-            return pd.DataFrame()
-    
     def get_stock_ticker_list(self, date: str = None, market: str = "ALL") -> List[str]:
-        """특정일 기준 종목코드 리스트"""
+        """종목코드 리스트"""
         date = self._get_valid_date(date)
-        
         try:
             tickers = stock.get_market_ticker_list(date, market=market)
             return list(tickers)
@@ -260,12 +221,12 @@ class PyKrxCollector(BaseCollector):
             return []
     
     def get_stock_name(self, ticker: str) -> str:
-        """종목코드로 종목명 조회"""
+        """종목명 조회"""
         try:
             return stock.get_market_ticker_name(ticker)
         except:
             return ""
     
     def collect(self, date: str = None) -> pd.DataFrame:
-        """BaseCollector 인터페이스 구현 - 투자지표 수집"""
+        """BaseCollector 인터페이스"""
         return self.get_market_fundamental(date)
