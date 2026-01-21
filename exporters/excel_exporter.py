@@ -1,9 +1,8 @@
 """
-엑셀 파일 생성 Pro (v8)
+엑셀 파일 생성 Pro v3 (Institutional Grade)
 - BOK 데이터 출력 수정
-- DCF 계산 시트 추가
-- CUFA Top Picks 자동 필터링
-- 활용가이드 대폭 개선
+- Top Picks 시트 제거
+- DCF 기본값 설정
 - 제작자: 이찬희(금은동 8기)
 """
 
@@ -26,11 +25,10 @@ logger = logging.getLogger("kr_stock_collector.exporter")
 
 
 class ExcelExporter:
-    """엑셀 파일 생성 Pro"""
+    """엑셀 파일 생성 Pro (기관투자자 수준)"""
     
     HEADER_FONT = Font(bold=True, color='FFFFFF', size=10)
     HEADER_FILL = PatternFill('solid', fgColor='4472C4')
-    HIGHLIGHT_FILL = PatternFill('solid', fgColor='FFC000')
     ALT_FILL = PatternFill('solid', fgColor='F2F2F2')
     BORDER = Border(
         left=Side(style='thin', color='D9D9D9'),
@@ -107,87 +105,36 @@ class ExcelExporter:
         ws.freeze_panes = 'B2'
     
     def add_guide_sheet(self) -> None:
-        """📚 활용가이드 (대폭 개선)"""
+        """📚 활용가이드"""
         ws = self.wb.create_sheet("📚 활용가이드", 0)
         
         guide = [
             "═══════════════════════════════════════════════════════════",
-            "📊 CUFA 충북대학교 가치투자학회 종목 스크리닝 시스템 Pro",
+            "📊 CUFA 충북대학교 가치투자학회 종목 스크리닝 시스템",
             f"   제작자: 이찬희 (금은동 8기 / CUFA 2대 회장)",
             f"   생성: {self.created_time.strftime('%Y-%m-%d %H:%M')}",
             "═══════════════════════════════════════════════════════════",
             "",
-            "━━━ 📑 시트별 안내 ━━━",
-            "📋 종목리스트 → 전체 상장사 기본 정보",
-            "📑 재무제표 → 3년치 재무상태표/손익계산서/현금흐름표",
-            "📊 시장데이터 → 주가, 시가총액, 거래량",
-            "📈 재무비율 → 60개+ 재무비율 (수익성/안정성/성장성/현금흐름)",
-            "🌍 거시경제 → 한국(BOK) + 글로벌(FRED) 80개+",
-            "⭐ Top Picks → CUFA 추천 종목 (자동 필터링)",
-            "💰 DCF 계산기 → 내재가치 산정용 템플릿",
+            "━━━ 📑 시트 안내 ━━━",
+            "📊 요약 → 수집 결과 통계",
+            "📋 종목리스트 → 전체 상장사",
+            "📑 재무제표 → BS/IS/CF 3년치",
+            "📊 시장데이터 → 주가/시총/거래량",
+            "📈 재무비율 → 60개+ 지표 (GPM Fallback 적용)",
+            "🌍 거시경제 → 한국(BOK) + 글로벌(FRED)",
+            "💰 DCF 계산기 → 내재가치 산정 템플릿",
             "",
             "━━━ 🎯 스크리닝 전략 ━━━",
+            "【 그레이엄 】 PER<10, PBR<1, 배당>3%",
+            "【 버핏 】 ROE>15%, ROIC>12%, OCF/순이익>1",
+            "【 린치 】 매출성장>15%, PEG<1",
             "",
-            "【 그레이엄 스타일 (안전마진) 】",
-            "  - PER < 10 (저평가)",
-            "  - PBR < 1 (청산가치 이하)",
-            "  - 배당수익률 > 3%",
-            "  - 부채비율 < 100%",
+            "━━━ 📊 핵심 지표 해석 ━━━",
+            "ROE: 15%+ 우수 | ROIC: 12%+ (자본효율)",
+            "부채비율: 100% 이하 | 이자보상배율: 3배+",
+            "OCF/순이익: 1+ (이익의 질) | Z-Score: 2.99+ 안전",
             "",
-            "【 버핏 스타일 (경쟁우위) 】",
-            "  - ROE > 15% (높은 자기자본이익률)",
-            "  - 영업이익률 > 10% (경쟁력)",
-            "  - OCF/순이익 > 1 (이익의 질)",
-            "  - ROIC > 12% (자본효율성)",
-            "",
-            "【 피터 린치 스타일 (성장) 】",
-            "  - 매출성장률 > 15%",
-            "  - PEG < 1 (저평가 성장주)",
-            "  - 순이익성장률 > 20%",
-            "",
-            "━━━ 📊 핵심 재무비율 해석 ━━━",
-            "",
-            "【 수익성 】",
-            "  ROE: 자기자본이익률 → 15% 이상 우수",
-            "  ROA: 총자산이익률 → 5% 이상 양호",
-            "  ROIC: 투하자본이익률 → 12% 이상 (버핏 기준)",
-            "  EBITDA마진: 현금창출력 → 20% 이상 우량",
-            "",
-            "【 안정성 】",
-            "  부채비율: 부채/자본 → 100% 이하 안전",
-            "  이자보상배율: 영업이익/이자 → 3배 이상",
-            "  유동비율: 유동자산/유동부채 → 150% 이상",
-            "",
-            "【 현금흐름 (가장 중요!) 】",
-            "  OCF: 영업현금흐름 → 순이익보다 커야 건전",
-            "  FCF: 잉여현금흐름 → 양수여야 투자/배당 가능",
-            "  OCF/순이익: 1 이상이면 이익의 질 우수",
-            "",
-            "【 밸류에이션 】",
-            "  PER: 주가수익비율 → 업종평균 대비 낮으면 저평가",
-            "  PBR: 주가순자산비율 → 1 이하면 자산대비 저평가",
-            "  EV/EBITDA: 기업가치/현금창출력 → 업종평균 비교",
-            "",
-            "【 부도위험 】",
-            "  Altman Z-Score: 2.99 이상 안전 / 1.81 이하 위험",
-            "",
-            "━━━ 🌍 거시경제 활용 ━━━",
-            "",
-            "【 금리 】",
-            "  금리 인상기 → 가치주/금융주 선호",
-            "  금리 인하기 → 성장주/기술주 선호",
-            "",
-            "【 경기 신호 】",
-            "  VIX > 30: 시장 공포 → 매수 기회 검토",
-            "  10Y-2Y 스프레드 음수: 경기침체 신호",
-            "  HY스프레드 확대: 신용위험 → 우량주 선호",
-            "",
-            "━━━ ⚠️ 투자 주의사항 ━━━",
-            "  1. 과거 실적은 미래를 보장하지 않습니다",
-            "  2. 업종별 적정 수치가 다릅니다",
-            "  3. 일회성 손익/비정상 현금흐름 확인 필수",
-            "  4. 공시자료와 교차 검증하세요",
-            "═══════════════════════════════════════════════════════════",
+            "⚠️ 과거 실적은 미래를 보장하지 않습니다",
         ]
         
         for idx, text in enumerate(guide, 1):
@@ -195,11 +142,9 @@ class ExcelExporter:
             if text.startswith("📊 CUFA"):
                 cell.font = Font(bold=True, size=14, color='1F4E79')
             elif text.startswith(("━━━", "═══")):
-                cell.font = Font(bold=True, size=11, color='4472C4')
-            elif text.startswith("【"):
-                cell.font = Font(bold=True, size=10)
+                cell.font = Font(bold=True, color='4472C4')
         
-        ws.column_dimensions['A'].width = 65
+        ws.column_dimensions['A'].width = 60
     
     def add_summary_sheet(self, summary: Dict) -> None:
         ws = self.wb.create_sheet("📊 요약", 1)
@@ -209,7 +154,7 @@ class ExcelExporter:
         
         data = [
             ('생성일시', self.created_time.strftime('%Y-%m-%d %H:%M:%S')),
-            ('제작자', '이찬희 (금은동 8기 / CUFA 2대 회장)'),
+            ('제작자', '이찬희 (금은동 8기)'),
             ('', ''),
             ('총 종목 수', f"{summary.get('total_stocks', 0):,}개"),
             ('재무제표', f"{summary.get('financial_count', 0):,}건"),
@@ -276,8 +221,7 @@ class ExcelExporter:
         result = result.loc[:, ~result.columns.duplicated()]
         
         col_map = {'stock_code': '종목코드', 'corp_name': '기업명', 'close': '종가',
-                   'volume': '거래량', 'change': '등락률', 'market_cap': '시가총액',
-                   'shares': '상장주식수', 'market': '시장'}
+                   'volume': '거래량', 'change': '등락률', 'market_cap': '시가총액'}
         result = result.rename(columns={k: v for k, v in col_map.items() if k in result.columns})
         
         self._write_df_to_sheet(ws, result)
@@ -296,29 +240,45 @@ class ExcelExporter:
         logger.info(f"📈 재무비율: {len(result)}건, {len(result.columns)}개 지표")
     
     def add_macro_sheet(self, kr_df: pd.DataFrame, global_df: pd.DataFrame) -> None:
-        """🌍 거시경제 (BOK + FRED)"""
+        """🌍 거시경제 (BOK + FRED) - 수정됨"""
         ws = self.wb.create_sheet("🌍 거시경제")
+        
+        # 디버깅 로그
+        logger.info(f"===== 거시경제 시트 생성 =====")
+        logger.info(f"BOK 수신: {len(kr_df) if kr_df is not None and not kr_df.empty else 0}건")
+        logger.info(f"FRED 수신: {len(global_df) if global_df is not None and not global_df.empty else 0}건")
         
         all_data = []
         
+        # BOK 데이터
         if kr_df is not None and not kr_df.empty:
             kr_data = kr_df.copy()
-            kr_data['출처'] = 'BOK(한국)'
+            if 'source' not in kr_data.columns:
+                kr_data['source'] = 'BOK(한국)'
             all_data.append(kr_data)
-            logger.info(f"BOK 데이터: {len(kr_data)}건")
+            logger.info(f"BOK 추가: {len(kr_data)}건")
+        else:
+            logger.warning("BOK 데이터 없음 또는 None")
         
+        # FRED 데이터
         if global_df is not None and not global_df.empty:
             global_data = global_df.copy()
-            global_data['출처'] = 'FRED(글로벌)'
+            if 'source' not in global_data.columns:
+                global_data['source'] = 'FRED(글로벌)'
             all_data.append(global_data)
-            logger.info(f"FRED 데이터: {len(global_data)}건")
+            logger.info(f"FRED 추가: {len(global_data)}건")
+        else:
+            logger.warning("FRED 데이터 없음 또는 None")
         
         if not all_data:
-            logger.warning("거시경제 데이터 없음")
+            logger.error("거시경제 데이터 전체 없음!")
+            ws['A1'] = "데이터 없음"
             return
         
         result = pd.concat(all_data, ignore_index=True)
+        logger.info(f"거시경제 통합: {len(result)}건")
         
+        # 컬럼 정리
         col_map = {'indicator': '지표', 'category': '카테고리', 'date': '기준일',
                    'value': '값', 'yoy_pct': 'YoY(%)', 'source': '출처'}
         result = result.rename(columns={k: v for k, v in col_map.items() if k in result.columns})
@@ -329,93 +289,40 @@ class ExcelExporter:
         result = result[cols]
         
         self._write_df_to_sheet(ws, result)
-        logger.info(f"🌍 거시경제: {len(result)}건")
-    
-    def add_top_picks_sheet(self, ratio_df: pd.DataFrame) -> None:
-        """⭐ CUFA Top Picks (자동 필터링)"""
-        if ratio_df is None or ratio_df.empty:
-            return
-        
-        ws = self.wb.create_sheet("⭐ Top Picks")
-        
-        # 스크리닝 조건
-        df = ratio_df.copy()
-        conditions = (
-            (df.get('ROE(%)', 0) > 15) &
-            (df.get('PER', 999) < 15) &
-            (df.get('부채비율(%)', 999) < 100) &
-            (df.get('영업현금흐름', 0) > 0)
-        )
-        
-        try:
-            picks = df[conditions].copy()
-        except:
-            picks = pd.DataFrame()
-        
-        if picks.empty:
-            # 조건 완화
-            conditions2 = (
-                (df.get('ROE(%)', 0) > 10) &
-                (df.get('PER', 999) < 20)
-            )
-            try:
-                picks = df[conditions2].head(20).copy()
-            except:
-                picks = df.head(10).copy()
-        
-        picks = self._add_company_name(picks, '종목코드')
-        
-        # 헤더 설명
-        ws['A1'] = "⭐ CUFA Top Picks (자동 스크리닝)"
-        ws['A1'].font = Font(bold=True, size=14, color='4472C4')
-        ws['A2'] = "조건: ROE>15%, PER<15, 부채비율<100%, 영업현금흐름 흑자"
-        ws['A3'] = ""
-        
-        # 데이터 출력
-        for r_idx, row in enumerate(dataframe_to_rows(picks, index=False, header=True), 4):
-            for c_idx, value in enumerate(row, 1):
-                ws.cell(row=r_idx, column=c_idx, value=value)
-        
-        self._apply_table_style(ws, header_row=4)
-        self._auto_width(ws)
-        
-        logger.info(f"⭐ Top Picks: {len(picks)}건")
+        logger.info(f"🌍 거시경제 시트 완료: {len(result)}건")
     
     def add_dcf_sheet(self) -> None:
-        """💰 DCF 계산기"""
+        """💰 DCF 계산기 (기본값 설정됨)"""
         ws = self.wb.create_sheet("💰 DCF 계산기")
         
-        # 헤더
         ws['A1'] = "💰 DCF (할인현금흐름) 내재가치 계산기"
         ws['A1'].font = Font(bold=True, size=14)
         
-        # 입력 섹션
         inputs = [
             ('', ''),
             ('━━━ 입력 항목 ━━━', ''),
-            ('종목코드', ''),
-            ('기업명', ''),
+            ('종목코드/기업명', '직접 입력'),
             ('', ''),
-            ('현재 FCF (잉여현금흐름)', 0),
-            ('성장률 (1~5년차) %', 15),
-            ('성장률 (6~10년차) %', 8),
-            ('영구성장률 %', 2),
-            ('할인율 (WACC) %', 10),
-            ('발행주식수', 0),
-            ('현재 주가', 0),
+            ('현재 FCF (억원)', 1000),      # 기본값 설정
+            ('성장률 1~5년차 (%)', 10),     # 보수적 기본값
+            ('성장률 6~10년차 (%)', 5),
+            ('영구성장률 (%)', 2),           # GDP 수준
+            ('할인율 WACC (%)', 10),         # KOSPI 기대수익률
+            ('발행주식수 (만주)', 1000),
+            ('현재 주가 (원)', 50000),
             ('', ''),
-            ('━━━ 계산 결과 ━━━', ''),
-            ('1~5년차 FCF 현재가치', '=셀에 수식 입력'),
-            ('6~10년차 FCF 현재가치', '=셀에 수식 입력'),
-            ('영구가치 현재가치', '=셀에 수식 입력'),
-            ('기업가치 (EV)', '=합계'),
-            ('순부채', 0),
-            ('주주가치', '=EV-순부채'),
-            ('주당 내재가치', '=주주가치/주식수'),
+            ('━━━ 계산 방법 ━━━', ''),
+            ('1~5년 FCF 현재가치', '=FCF×(1+g)^n / (1+r)^n 합계'),
+            ('6~10년 FCF 현재가치', '=위와 동일'),
+            ('영구가치', '=FCF_10 × (1+g영구) / (r-g영구)'),
+            ('기업가치(EV)', '=1~5년 + 6~10년 + 영구가치'),
+            ('순부채', '=차입금 - 현금'),
+            ('주주가치', '=EV - 순부채'),
+            ('주당 내재가치', '=주주가치 / 주식수'),
             ('', ''),
             ('━━━ 투자 판단 ━━━', ''),
-            ('안전마진 %', '=(내재가치-현재주가)/내재가치'),
-            ('투자의견', '안전마진 30%+ → 매수 검토'),
+            ('안전마진', '=(내재가치-현재주가) / 내재가치'),
+            ('판단 기준', '안전마진 30%+ → 매수 검토'),
         ]
         
         for idx, (label, value) in enumerate(inputs, 1):
@@ -426,7 +333,7 @@ class ExcelExporter:
                 cell_a.font = Font(bold=True, color='4472C4')
         
         ws.column_dimensions['A'].width = 30
-        ws.column_dimensions['B'].width = 25
+        ws.column_dimensions['B'].width = 35
         
         logger.info("💰 DCF 계산기 시트 추가")
     
@@ -478,6 +385,8 @@ class ExcelExporter:
     ) -> str:
         
         logger.info("=== 엑셀 내보내기 시작 ===")
+        logger.info(f"macro_kr_data type: {type(macro_kr_data)}")
+        logger.info(f"macro_global_data type: {type(macro_global_data)}")
         
         self.set_stock_names(stock_list)
         
@@ -486,11 +395,11 @@ class ExcelExporter:
             'financial_count': len(financial_data) if financial_data is not None else 0,
             'market_count': len(market_data) if market_data is not None else 0,
             'ratio_count': len(ratio_data) if ratio_data is not None else 0,
-            'macro_kr_count': len(macro_kr_data) if macro_kr_data is not None else 0,
-            'macro_global_count': len(macro_global_data) if macro_global_data is not None else 0,
+            'macro_kr_count': len(macro_kr_data) if macro_kr_data is not None and not macro_kr_data.empty else 0,
+            'macro_global_count': len(macro_global_data) if macro_global_data is not None and not macro_global_data.empty else 0,
         }
         
-        # 시트 생성 순서
+        # 시트 생성 (Top Picks 제거됨)
         self.add_guide_sheet()
         self.add_summary_sheet(summary)
         self.add_stock_list_sheet(stock_list, market_data)
@@ -498,7 +407,6 @@ class ExcelExporter:
         self.add_market_sheet(market_data)
         self.add_ratio_sheet(ratio_data)
         self.add_macro_sheet(macro_kr_data, macro_global_data)
-        self.add_top_picks_sheet(ratio_data)
         self.add_dcf_sheet()
         self.add_account_sheet()
         
