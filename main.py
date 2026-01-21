@@ -155,21 +155,32 @@ def main():
     market_cap_df = None
     
     # =====================================
-    # 7. 종목 기본정보 (시총, 주식수)
+    # 7. 종목 기본정보 (시총, 주식수) - FDR 사용
     # =====================================
     tracker.start_step("종목 기본정보 수집", len(stock_codes))
     
     try:
-        # 시가총액 데이터
-        market_cap_df = krx.get_market_cap()
+        # FDR로 KRX 시가총액 데이터 수집 (pykrx 대신)
+        import FinanceDataReader as fdr_lib
         
-        if market_cap_df is not None and not market_cap_df.empty:
-            # 종목코드와 병합할 수 있게 컬럼 정리
-            if '티커' in market_cap_df.columns:
-                market_cap_df = market_cap_df.rename(columns={'티커': 'Code'})
+        # KRX 전체 종목 시가총액 조회
+        krx_cap = fdr_lib.StockListing('KRX')
+        
+        if krx_cap is not None and not krx_cap.empty:
+            market_cap_df = krx_cap.copy()
             
-            tracker.update(len(stock_codes), "시총 데이터 완료")
-            tracker.finish_step(f"{len(market_cap_df):,}개 종목 시총 수집")
+            # 컬럼명 통일
+            col_map = {
+                'Code': 'stock_code', 'Symbol': 'stock_code',
+                'Name': 'corp_name', 'Market': 'market',
+                'Marcap': 'market_cap', 'Stocks': 'shares',
+                'Close': 'close', 'Volume': 'volume',
+                'ChagesRatio': 'change', 'ChangeRatio': 'change'
+            }
+            market_cap_df = market_cap_df.rename(columns={k: v for k, v in col_map.items() if k in market_cap_df.columns})
+            
+            tracker.update(len(market_cap_df), "FDR 시총 완료")
+            tracker.finish_step(f"{len(market_cap_df):,}개 종목 시총 수집 (FDR)")
         else:
             tracker.finish_step("시총 데이터 없음")
     except Exception as e:
@@ -203,46 +214,69 @@ def main():
         tracker.skip_step("재무제표 수집", "설정에서 제외됨")
     
     # =====================================
-    # 9. 투자지표 수집
+    # 9. 투자지표 수집 - FDR 데이터 활용
     # =====================================
     if screening.price or screening.valuation:
         tracker.start_step("투자지표 수집", len(stock_codes))
         
         try:
-            indicator_data = krx.get_market_fundamental()
-            
-            if indicator_data is not None and not indicator_data.empty:
-                indicator_data = cleaner.clean_indicator_data(indicator_data)
+            # FDR에서 가져온 market_cap_df에 PER, PBR 등이 포함되어 있음
+            if market_cap_df is not None and not market_cap_df.empty:
+                # 투자지표 관련 컬럼 추출
+                indicator_cols = ['stock_code', 'corp_name', 'close', 'market_cap', 'shares']
+                # PER, PBR 등이 있으면 추가
+                for col in ['PER', 'PBR', 'EPS', 'BPS', 'DIV', 'DPS']:
+                    if col in market_cap_df.columns:
+                        indicator_cols.append(col)
+                
+                avail_cols = [c for c in indicator_cols if c in market_cap_df.columns]
+                indicator_data = market_cap_df[avail_cols].copy()
+                
+                # 컬럼명 소문자로 통일
+                indicator_data.columns = [c.lower() if c not in ['stock_code', 'corp_name'] else c for c in indicator_data.columns]
+                
                 tracker.update(len(indicator_data))
-                tracker.finish_step(f"{len(indicator_data):,}건 수집")
+                tracker.finish_step(f"{len(indicator_data):,}건 (FDR)")
             else:
-                tracker.finish_step("데이터 없음")
+                # FDR에 없으면 빈 데이터
+                indicator_data = pd.DataFrame()
+                tracker.finish_step("데이터 없음 (FDR)")
         except Exception as e:
             logger.error(f"투자지표 오류: {e}")
-            tracker.finish_step("수집 실패")
+            indicator_data = pd.DataFrame()
+            tracker.finish_step("건너뜀")
     else:
         tracker.skip_step("투자지표 수집", "설정에서 제외됨")
     
     # =====================================
-    # 10. 주가 시세 수집
+    # 10. 주가 시세 수집 - FDR 데이터 활용
     # =====================================
     if screening.price:
         tracker.start_step("주가 시세 수집", len(stock_codes))
         
         try:
-            price_data = krx.get_market_ohlcv()
-            
-            if price_data is not None and not price_data.empty:
-                price_data = cleaner.clean_price_data(price_data)
+            # FDR market_cap_df에서 주가 정보 추출
+            if market_cap_df is not None and not market_cap_df.empty:
+                price_cols = ['stock_code', 'corp_name', 'close', 'volume', 'change', 'market_cap']
+                avail_cols = [c for c in price_cols if c in market_cap_df.columns]
+                price_data = market_cap_df[avail_cols].copy()
+                
+                # 날짜 추가
+                from datetime import datetime as dt
+                price_data['date'] = dt.now().strftime('%Y-%m-%d')
+                
                 tracker.update(len(price_data))
-                tracker.finish_step(f"{len(price_data):,}건 수집")
+                tracker.finish_step(f"{len(price_data):,}건 (FDR)")
             else:
+                price_data = pd.DataFrame()
                 tracker.finish_step("데이터 없음")
         except Exception as e:
             logger.error(f"주가 오류: {e}")
-            tracker.finish_step("수집 실패")
+            price_data = pd.DataFrame()
+            tracker.finish_step("처리 실패")
     else:
         tracker.skip_step("주가 시세 수집", "설정에서 제외됨")
+
     
     # =====================================
     # 11. 한국 경제지표 수집
