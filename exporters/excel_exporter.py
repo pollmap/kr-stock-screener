@@ -1,10 +1,8 @@
 """
-엑셀 파일 생성 모듈 (v4 - 완전 한글화, 대폭 확장)
-- 기업명 포함
-- 계정과목 설명 시트 (50개+)
-- 전문 활용 가이드 시트
+엑셀 파일 생성 모듈 (v5 - 수식 오류 수정)
+- 수식에서 = 제거 (텍스트로 표시)
+- 제작자: 이찬희(금은동 8기)
 - 전체 컬럼 한글화
-- 제작자/일시 표시
 """
 
 from openpyxl import Workbook
@@ -17,7 +15,6 @@ from datetime import datetime
 import logging
 import os
 
-# 계정 설명 가져오기
 try:
     from config.account_explanations import ACCOUNT_EXPLANATIONS
 except ImportError:
@@ -27,9 +24,8 @@ logger = logging.getLogger("kr_stock_collector.exporter")
 
 
 class ExcelExporter:
-    """엑셀 파일 생성 클래스 (완전 한글화)"""
+    """엑셀 파일 생성 클래스"""
     
-    # 스타일
     HEADER_FONT = Font(bold=True, color='FFFFFF', size=10)
     HEADER_FILL = PatternFill('solid', fgColor='4472C4')
     ALT_FILL = PatternFill('solid', fgColor='F2F2F2')
@@ -40,36 +36,20 @@ class ExcelExporter:
         bottom=Side(style='thin', color='D9D9D9')
     )
     
-    # 전체 컬럼 한글화 매핑
     COLUMN_KOREAN = {
-        # 기본 정보
         'stock_code': '종목코드', 'Code': '종목코드', 'Name': '기업명',
         'Market': '시장', 'Sector': '업종', 'Industry': '산업',
         'market_cap': '시가총액', 'shares': '상장주식수', 'date': '기준일',
-        
-        # 주가
         'open': '시가', 'high': '고가', 'low': '저가', 'close': '종가',
         'volume': '거래량', 'value': '거래대금', 'change': '등락률',
-        
-        # 투자지표
         'bps': 'BPS', 'per': 'PER', 'pbr': 'PBR', 'eps': 'EPS',
         'div_yield': '배당수익률', 'dps': 'DPS',
-        
-        # 재무제표 (OpenDART)
         'corp_code': '기업코드', 'corp_name': '기업명', 'bsns_year': '사업연도',
         'reprt_code': '보고서', 'account_nm': '계정과목',
         'thstrm_amount': '당기금액', 'frmtrm_amount': '전기금액',
         'bfefrmtrm_amount': '전전기금액', 'fs_div': '재무제표구분',
-        'fs_nm': '재무제표명', 'sj_div': '계정구분', 'sj_nm': '계정분류',
-        'thstrm_nm': '당기명', 'thstrm_dt': '당기일자',
-        'frmtrm_nm': '전기명', 'frmtrm_dt': '전기일자',
-        'bfefrmtrm_nm': '전전기명', 'bfefrmtrm_dt': '전전기일자',
-        'ord': '순서', 'currency': '통화',
-        
-        # 거시경제
-        'TIME': '날짜', 'DATA_VALUE': '값', 'STAT_NAME': '통계명',
-        'indicator': '지표명', 'category': '카테고리', 'source': '출처',
-        'series_id': '시리즈ID',
+        'indicator': '지표', 'category': '카테고리', 'source': '출처',
+        'yoy_pct': 'YoY(%)',
     }
     
     def __init__(self, output_dir: str = "outputs"):
@@ -81,12 +61,10 @@ class ExcelExporter:
         self.created_time = datetime.now()
     
     def set_stock_names(self, stock_list: pd.DataFrame) -> None:
-        """종목명 매핑 설정"""
         if stock_list is not None and 'Code' in stock_list.columns and 'Name' in stock_list.columns:
             self.stock_names = dict(zip(stock_list['Code'], stock_list['Name']))
     
     def _add_company_name(self, df: pd.DataFrame, code_col: str = 'stock_code') -> pd.DataFrame:
-        """기업명 컬럼 추가"""
         if code_col in df.columns and self.stock_names:
             name_col = df[code_col].map(self.stock_names)
             idx = df.columns.get_loc(code_col) + 1
@@ -94,12 +72,10 @@ class ExcelExporter:
         return df
     
     def _korean_columns(self, df: pd.DataFrame) -> pd.DataFrame:
-        """모든 컬럼을 한글로 변환"""
         rename_map = {k: v for k, v in self.COLUMN_KOREAN.items() if k in df.columns}
         return df.rename(columns=rename_map)
     
     def _auto_width(self, ws, min_w: int = 8, max_w: int = 35) -> None:
-        """컬럼 너비 자동"""
         for col in ws.columns:
             max_len = 0
             col_letter = get_column_letter(col[0].column)
@@ -114,7 +90,6 @@ class ExcelExporter:
             ws.column_dimensions[col_letter].width = min(max(max_len + 2, min_w), max_w)
     
     def _apply_table_style(self, ws, header_row: int = 1) -> None:
-        """테이블 스타일 적용"""
         for cell in ws[header_row]:
             cell.font = self.HEADER_FONT
             cell.fill = self.HEADER_FILL
@@ -132,129 +107,84 @@ class ExcelExporter:
                         cell.number_format = '0.00'
     
     def add_usage_guide_sheet(self) -> None:
-        """📚 전문 활용 가이드 시트"""
+        """활용 가이드 시트 (수식 오류 수정)"""
         ws = self.wb.create_sheet("📚 활용가이드", 0)
         
+        # = 기호 제거해서 수식 오류 방지
         content = [
-            ("══════════════════════════════════════════════════════════════════", "", ""),
+            ("═══════════════════════════════════════════════════════════════", "", ""),
             ("📊 충북대학교 가치투자학회 종목 스크리닝 시스템", "", ""),
-            (f"   제작자: 이찬희  |  생성일시: {self.created_time.strftime('%Y-%m-%d %H:%M')}", "", ""),
-            ("══════════════════════════════════════════════════════════════════", "", ""),
+            (f"   제작자: 이찬희(금은동 8기)  |  생성: {self.created_time.strftime('%Y-%m-%d %H:%M')}", "", ""),
+            ("═══════════════════════════════════════════════════════════════", "", ""),
             ("", "", ""),
             
-            # 1. 스크리닝 전략
             ("━━━ 📈 1. 투자 스크리닝 전략 ━━━", "", ""),
             ("", "", ""),
-            ("【 벤저민 그레이엄 스타일 (안전마진 투자) 】", "", ""),
-            ("", "투자지표 시트 → 필터 적용:", ""),
-            ("", "  • PER < 10 (저평가)", ""),
-            ("", "  • PBR < 1 (청산가치 이하)", ""),
-            ("", "  • 배당수익률 > 3%", ""),
-            ("", "  → 결과: 안전마진이 큰 저평가 우량주", ""),
+            ("【 그레이엄 스타일 (안전마진) 】", "", ""),
+            ("", "투자지표 시트에서 필터:", ""),
+            ("", "  - PER 10 미만 (저평가)", ""),
+            ("", "  - PBR 1 미만 (청산가치 이하)", ""),
+            ("", "  - 배당수익률 3% 초과", ""),
             ("", "", ""),
-            ("【 워렌 버핏 스타일 (경쟁우위 투자) 】", "", ""),
-            ("", "재무제표 시트 → 필터 적용:", ""),
-            ("", "  • ROE > 15% (자기자본이익률)", ""),
-            ("", "  • 영업이익률 > 10%", ""),
-            ("", "  • 부채비율 < 50%", ""),
-            ("", "  → 결과: 지속적 경쟁우위 보유 우량 기업", ""),
+            ("【 버핏 스타일 (경쟁우위) 】", "", ""),
+            ("", "재무제표에서:", ""),
+            ("", "  - ROE 15% 초과", ""),
+            ("", "  - 영업이익률 10% 초과", ""),
+            ("", "  - 부채비율 50% 미만", ""),
             ("", "", ""),
-            ("【 피터 린치 스타일 (성장주 발굴) 】", "", ""),
-            ("", "재무제표 시트에서:", ""),
-            ("", "  • 매출성장률 > 20%", ""),
-            ("", "  • 영업이익성장률 > 20%", ""),
-            ("", "  • PEG < 1 (PER / 성장률)", ""),
-            ("", "  → 결과: 저평가된 고성장 중소형주", ""),
-            ("", "", ""),
-            ("【 배당 투자 전략 】", "", ""),
-            ("", "투자지표 시트에서:", ""),
-            ("", "  • 배당수익률 > 4%", ""),
-            ("", "  • 배당성향 20~60% (적정 범위)", ""),
-            ("", "  • 5년 연속 배당 지급", ""),
-            ("", "  → 결과: 안정적 현금흐름 배당주", ""),
+            ("【 피터 린치 스타일 (성장) 】", "", ""),
+            ("", "  - 매출성장률 20% 초과", ""),
+            ("", "  - PEG 1 미만 (저평가 성장주)", ""),
             ("", "", ""),
             
-            # 2. 재무분석 활용법
-            ("━━━ 💰 2. 재무제표 분석 가이드 ━━━", "", ""),
+            ("━━━ 💰 2. 재무분석 가이드 ━━━", "", ""),
             ("", "", ""),
-            ("【 수익성 분석 (얼마나 잘 버는가?) 】", "", ""),
-            ("지표", "산식", "기준"),
-            ("매출총이익률", "= 매출총이익 / 매출액", "30%+ 양호"),
-            ("영업이익률", "= 영업이익 / 매출액", "10%+ 우량"),
-            ("순이익률", "= 당기순이익 / 매출액", "5%+ 양호"),
-            ("ROE", "= 당기순이익 / 자본총계", "15%+ 우수"),
-            ("ROA", "= 당기순이익 / 자산총계", "5%+ 양호"),
+            ("【 수익성 지표 】", "", ""),
+            ("지표", "계산", "기준"),
+            ("매출총이익률", "매출총이익 / 매출액", "30%+ 양호"),
+            ("영업이익률", "영업이익 / 매출액", "10%+ 우량"),
+            ("ROE", "당기순이익 / 자본총계", "15%+ 우수"),
+            ("ROA", "당기순이익 / 자산총계", "5%+ 양호"),
             ("", "", ""),
-            ("【 안정성 분석 (얼마나 안전한가?) 】", "", ""),
-            ("부채비율", "= 부채총계 / 자본총계", "100% 이하 안정"),
-            ("유동비율", "= 유동자산 / 유동부채", "100%+ 양호"),
-            ("당좌비율", "= (유동자산-재고) / 유동부채", "100%+ 우수"),
-            ("이자보상배율", "= 영업이익 / 이자비용", "3배+ 안전"),
-            ("", "", ""),
-            ("【 성장성 분석 (얼마나 성장하는가?) 】", "", ""),
-            ("매출성장률", "= (당기매출-전기매출) / 전기매출", "10%+ 성장"),
-            ("영업이익성장률", "= (당기영업이익-전기) / 전기", "10%+ 성장"),
-            ("자산성장률", "= (당기자산-전기자산) / 전기자산", "양호"),
+            ("【 안정성 지표 】", "", ""),
+            ("부채비율", "부채총계 / 자본총계", "100% 이하"),
+            ("유동비율", "유동자산 / 유동부채", "100%+ 양호"),
+            ("이자보상배율", "영업이익 / 이자비용", "3배+ 안전"),
             ("", "", ""),
             
-            # 3. 거시경제 활용
-            ("━━━ 🌍 3. 거시경제 지표 활용법 ━━━", "", ""),
+            ("━━━ 🌍 3. 거시경제 활용 ━━━", "", ""),
             ("", "", ""),
-            ("【 금리와 주식시장 】", "", ""),
-            ("금리 인상기", "→ 가치주, 금융주, 현금보유 기업 유리", ""),
-            ("금리 인하기", "→ 성장주, 기술주, 부채 많은 기업 유리", ""),
+            ("【 금리 해석 】", "", ""),
+            ("", "금리 인상기 -> 가치주/금융주 유리", ""),
+            ("", "금리 인하기 -> 성장주/기술주 유리", ""),
             ("", "", ""),
-            ("【 주요 지표 해석 】", "", ""),
-            ("VIX > 30", "→ 시장 공포 극대화, 매수 기회 검토", ""),
-            ("10Y-2Y 스프레드 역전", "→ 경기침체 신호, 방어주 비중 확대", ""),
-            ("달러인덱스 상승", "→ 신흥국 주식 부담, 수출주 주의", ""),
-            ("유가 급등", "→ 인플레이션 우려, 에너지주 관심", ""),
-            ("비트코인 급등", "→ 위험자산 선호, 성장주 동반 상승 가능", ""),
+            ("【 신호 해석 】", "", ""),
+            ("VIX 30 초과", "시장 공포, 매수 기회 검토", ""),
+            ("10Y-2Y 마이너스", "경기침체 신호, 방어주 비중확대", ""),
+            ("HY스프레드 상승", "신용위험 확대, 우량주 선호", ""),
             ("", "", ""),
             
-            # 4. 취업 활용
-            ("━━━ 💼 4. 취업/커리어 활용법 ━━━", "", ""),
+            ("━━━ 💼 4. 취업 활용 ━━━", "", ""),
             ("", "", ""),
-            ("【 금융권 면접 활용 】", "", ""),
-            ("", "• '이 시스템으로 2,500개 기업 재무데이터 분석 경험'", ""),
-            ("", "• 'OpenDART, FRED API를 활용한 데이터 수집 자동화'", ""),
-            ("", "• 'Python으로 스크리닝 시스템 개발 및 운영'", ""),
-            ("", "", ""),
-            ("【 리서치 역량 어필 】", "", ""),
-            ("", "• '데이터 기반 투자 논리 전개 능력'", ""),
-            ("", "• '재무제표 분석을 통한 기업가치 평가'", ""),
-            ("", "• '거시경제 지표와 주식시장 상관관계 분석'", ""),
-            ("", "", ""),
-            ("【 포트폴리오 레포트 작성 예시 】", "", ""),
-            ("", "1. 투자 아이디어 발굴 (스크리닝)", ""),
-            ("", "2. 재무분석 (수익성/안정성/성장성)", ""),
-            ("", "3. Valuation (PER/PBR/DCF)", ""),
-            ("", "4. 리스크 분석", ""),
-            ("", "5. 투자 결론 및 목표가", ""),
+            ("", "- 2,500개 기업 재무데이터 분석 경험", ""),
+            ("", "- OpenDART/FRED API 활용 자동화", ""),
+            ("", "- Python 데이터 수집 시스템 개발", ""),
             ("", "", ""),
             
-            # 5. 시트별 가이드
-            ("━━━ 📑 5. 각 시트 사용법 ━━━", "", ""),
-            ("", "", ""),
-            ("시트명", "내용", "필터 팁"),
-            ("📋 종목리스트", "전체 종목 코드/기업명/시장", "시장=KOSPI로 필터"),
-            ("📑 재무제표", "3년치 재무제표 데이터", "계정과목=매출액으로 필터"),
-            ("📈 투자지표", "PER/PBR/배당률 등", "PER<10 AND PBR<1"),
-            ("💹 주가", "시가/고가/저가/종가", "특정 종목 필터"),
-            ("🌍 거시경제", "40개+ 글로벌 지표", "카테고리로 필터"),
-            ("📖 계정설명", "계정과목 한글 설명", "모르는 계정 검색"),
+            ("━━━ 📑 5. 시트별 안내 ━━━", "", ""),
+            ("시트", "내용", "팁"),
+            ("📋 종목리스트", "전체 종목/시장/시총", "시장 필터"),
+            ("📑 재무제표", "3년치 재무데이터", "계정과목 필터"),
+            ("📈 투자지표", "PER/PBR/배당률", "복합조건 필터"),
+            ("🌍 거시경제", "금리/물가/환율 최신값", "카테고리 필터"),
+            ("📖 계정설명", "계정과목 한글설명", "검색"),
             ("", "", ""),
             
-            # 6. 주의사항
-            ("━━━ ⚠️ 6. 투자 주의사항 ━━━", "", ""),
-            ("", "", ""),
-            ("", "⚠️ 과거 실적이 미래 성과를 보장하지 않습니다", ""),
-            ("", "⚠️ 업종별 적정 수치가 다릅니다 (비교 필수)", ""),
-            ("", "⚠️ 일회성 손익(자산매각 등)을 반드시 확인하세요", ""),
-            ("", "⚠️ 투자 결정 전 애널리스트 리포트도 참고하세요", ""),
-            ("", "⚠️ 본 자료는 투자 권유가 아닙니다", ""),
-            ("", "", ""),
-            ("══════════════════════════════════════════════════════════════════", "", ""),
+            ("━━━ ⚠️ 주의사항 ━━━", "", ""),
+            ("", "- 과거 실적이 미래를 보장하지 않습니다", ""),
+            ("", "- 업종별 적정 수치가 다릅니다", ""),
+            ("", "- 일회성 손익 확인 필요", ""),
+            ("═══════════════════════════════════════════════════════════════", "", ""),
         ]
         
         for idx, (col1, col2, col3) in enumerate(content, 1):
@@ -264,20 +194,20 @@ class ExcelExporter:
             
             if col1.startswith("📊"):
                 ws.cell(row=idx, column=1).font = Font(bold=True, size=14, color='1F4E79')
-            elif col1.startswith(("━━━", "══")):
+            elif col1.startswith(("━━━", "═══")):
                 ws.cell(row=idx, column=1).font = Font(bold=True, size=11, color='4472C4')
             elif col1.startswith("【"):
                 ws.cell(row=idx, column=1).font = Font(bold=True, size=10)
         
-        ws.column_dimensions['A'].width = 35
-        ws.column_dimensions['B'].width = 50
-        ws.column_dimensions['C'].width = 25
+        ws.column_dimensions['A'].width = 30
+        ws.column_dimensions['B'].width = 40
+        ws.column_dimensions['C'].width = 20
     
     def add_account_explanation_sheet(self) -> None:
-        """📖 계정과목 설명 시트"""
+        """계정과목 설명 시트"""
         ws = self.wb.create_sheet("📖 계정설명")
         
-        headers = ['계정명', '영문명', '분류', '설명', '활용법', '주의사항']
+        headers = ['계정명', '영문명', '분류', '설명', '활용법']
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col, value=header)
             cell.font = self.HEADER_FONT
@@ -290,19 +220,17 @@ class ExcelExporter:
             ws.cell(row=row, column=3, value=info.get('분류', ''))
             ws.cell(row=row, column=4, value=info.get('설명', ''))
             ws.cell(row=row, column=5, value=info.get('활용', ''))
-            ws.cell(row=row, column=6, value=info.get('주의사항', ''))
             
             if row % 2 == 0:
-                for col in range(1, 7):
+                for col in range(1, 6):
                     ws.cell(row=row, column=col).fill = self.ALT_FILL
             row += 1
         
-        ws.auto_filter.ref = f"A1:F{row-1}"
+        ws.auto_filter.ref = f"A1:E{row-1}"
         self._auto_width(ws)
         ws.freeze_panes = 'B2'
     
     def add_summary_sheet(self, summary: Dict) -> None:
-        """요약 시트"""
         ws = self.wb.create_sheet("📊 요약", 1)
         
         ws['A1'] = "📊 수집 결과 요약"
@@ -311,7 +239,7 @@ class ExcelExporter:
         
         data = [
             ('생성일시', self.created_time.strftime('%Y-%m-%d %H:%M:%S')),
-            ('제작자', '이찬희 (충북대학교 가치투자학회)'),
+            ('제작자', '이찬희(금은동 8기)'),
             ('', ''),
             ('총 종목 수', f"{summary.get('total_stocks', 0):,}개"),
             ('재무제표', f"{summary.get('financial_count', 0):,}건"),
@@ -328,7 +256,6 @@ class ExcelExporter:
         ws.column_dimensions['B'].width = 35
     
     def add_stock_list_sheet(self, df: pd.DataFrame, cap_df: pd.DataFrame = None) -> None:
-        """종목리스트 시트"""
         if df.empty:
             return
         
@@ -349,28 +276,16 @@ class ExcelExporter:
         ws.auto_filter.ref = ws.dimensions
         self._auto_width(ws)
         ws.freeze_panes = 'C2'
-        
-        logger.info(f"종목리스트 시트: {len(df)}건")
     
     def add_financial_sheet(self, df: pd.DataFrame) -> None:
-        """재무제표 시트"""
         if df.empty:
             return
         
         ws = self.wb.create_sheet("📑 재무제표")
         
-        # 기업명 추가
         if 'corp_name' not in df.columns and 'stock_code' in df.columns:
             df = self._add_company_name(df.copy(), 'stock_code')
         
-        # 중요 컬럼 순서 정리
-        priority = ['stock_code', '기업명', 'corp_name', 'bsns_year', 'account_nm', 
-                    'thstrm_amount', 'frmtrm_amount', 'bfefrmtrm_amount']
-        ordered = [c for c in priority if c in df.columns]
-        others = [c for c in df.columns if c not in priority]
-        df = df[ordered + others]
-        
-        # 컬럼 한글화
         df = self._korean_columns(df)
         
         for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), 1):
@@ -381,11 +296,8 @@ class ExcelExporter:
         ws.auto_filter.ref = ws.dimensions
         self._auto_width(ws)
         ws.freeze_panes = 'D2'
-        
-        logger.info(f"재무제표 시트: {len(df)}건")
     
     def add_indicator_sheet(self, df: pd.DataFrame) -> None:
-        """투자지표 시트"""
         if df.empty:
             return
         
@@ -402,11 +314,8 @@ class ExcelExporter:
         ws.auto_filter.ref = ws.dimensions
         self._auto_width(ws)
         ws.freeze_panes = 'C2'
-        
-        logger.info(f"투자지표 시트: {len(df)}건")
     
     def add_price_sheet(self, df: pd.DataFrame) -> None:
-        """주가 시트"""
         if df.empty:
             return
         
@@ -423,11 +332,8 @@ class ExcelExporter:
         ws.auto_filter.ref = ws.dimensions
         self._auto_width(ws)
         ws.freeze_panes = 'C2'
-        
-        logger.info(f"주가 시트: {len(df)}건")
     
     def add_macro_sheet(self, df: pd.DataFrame) -> None:
-        """거시경제 시트"""
         if df.empty:
             return
         
@@ -435,10 +341,15 @@ class ExcelExporter:
         
         df = self._korean_columns(df)
         
-        keep_cols = ['날짜', '카테고리', '지표명', '값', '출처', '시리즈ID']
-        available = [c for c in keep_cols if c in df.columns]
+        # 컬럼 순서 정리
+        priority = ['카테고리', '지표', '기준일', 'value', 'YoY(%)', '출처']
+        available = [c for c in priority if c in df.columns]
+        others = [c for c in df.columns if c not in priority]
         if available:
-            df = df[available]
+            df = df[available + others]
+        
+        # value -> 값 변경
+        df = df.rename(columns={'value': '값'})
         
         for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), 1):
             for c_idx, value in enumerate(row, 1):
@@ -448,11 +359,8 @@ class ExcelExporter:
         ws.auto_filter.ref = ws.dimensions
         self._auto_width(ws)
         ws.freeze_panes = 'B2'
-        
-        logger.info(f"거시경제 시트: {len(df)}건")
     
     def save(self, filename: str = None) -> str:
-        """저장"""
         if filename is None:
             timestamp = self.created_time.strftime('%Y%m%d_%H%M%S')
             filename = f"종목스크리너_{timestamp}.xlsx"
@@ -475,7 +383,6 @@ class ExcelExporter:
         market_cap_df: pd.DataFrame = None,
         filename: str = None
     ) -> str:
-        """전체 내보내기"""
         
         self.set_stock_names(stock_list)
         
@@ -488,7 +395,6 @@ class ExcelExporter:
             'macro_count': len(macro_data) if macro_data is not None else 0,
         }
         
-        # 시트 추가 (순서대로)
         self.add_usage_guide_sheet()
         self.add_summary_sheet(summary)
         
@@ -507,7 +413,6 @@ class ExcelExporter:
         if macro_data is not None and not macro_data.empty:
             self.add_macro_sheet(macro_data)
         
-        # 계정 설명 시트 (마지막)
         self.add_account_explanation_sheet()
         
         return self.save(filename)

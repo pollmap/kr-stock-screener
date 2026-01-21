@@ -1,7 +1,7 @@
 """
-pykrx 기반 KRX 데이터 수집기 (미래날짜 대응)
-- 미래 날짜 감지 및 실제 최근 거래일 사용
-- FDR 폴백 지원
+pykrx 기반 KRX 데이터 수집기 (최신 데이터 자동 탐색)
+- pykrx에서 직접 최근 거래일 조회
+- 하드코딩 없음
 """
 
 from pykrx import stock
@@ -32,37 +32,56 @@ class PyKrxCollector(BaseCollector):
             cache_expiry_days=1,
             rate_limit_per_minute=300
         )
+        self._valid_date = None  # 캐시
+    
+    def _find_recent_trading_date(self) -> str:
+        """pykrx에서 가장 최근 거래일 자동 조회"""
+        if self._valid_date:
+            return self._valid_date
+        
+        try:
+            # pykrx의 최근 거래일 조회 기능 사용
+            # 현재 월의 거래일 목록에서 가장 최근 날짜 가져오기
+            today = datetime.now()
+            
+            # 최근 30일간의 거래일 조회
+            start = (today - timedelta(days=30)).strftime('%Y%m%d')
+            end = today.strftime('%Y%m%d')
+            
+            # 코스피 지수 데이터로 거래일 확인
+            df = stock.get_index_ohlcv(start, end, "1001")  # KOSPI
+            
+            if df is not None and not df.empty:
+                # 가장 최근 날짜
+                recent_date = df.index[-1].strftime('%Y%m%d')
+                self._valid_date = recent_date
+                self.logger.info(f"최근 거래일: {recent_date}")
+                return recent_date
+        except Exception as e:
+            self.logger.warning(f"거래일 조회 실패: {e}")
+        
+        # 폴백: 현재 날짜에서 영업일 계산
+        dt = datetime.now()
+        while dt.weekday() >= 5:  # 주말이면
+            dt -= timedelta(days=1)
+        dt -= timedelta(days=1)  # 어제
+        
+        self._valid_date = dt.strftime('%Y%m%d')
+        return self._valid_date
     
     def _get_valid_date(self, date: str = None) -> str:
-        """유효한 거래일 반환 (미래 날짜 방지)"""
-        
-        # 현재 실제 시스템 시간 - 미래날짜인지 확인
-        # 테스트 환경에서 미래날짜를 사용할 수 있으므로 하드코딩된 안전한 날짜 사용
-        # 2025년 1월 기준 최근 거래일
-        SAFE_DATE = "20250117"  # 안전한 기본 거래일
-        
+        """유효한 거래일 반환"""
         if date is None:
-            # 시스템 시간이 미래일 수 있으므로 안전한 날짜 사용
-            try:
-                # pykrx로 데이터 확인
-                test_df = stock.get_market_ohlcv(SAFE_DATE, market="KOSPI")
-                if test_df is not None and not test_df.empty:
-                    self.logger.info(f"사용 날짜: {SAFE_DATE}")
-                    return SAFE_DATE
-            except:
-                pass
-            
-            # 폴백: 최근 알려진 거래일
-            return SAFE_DATE
+            return self._find_recent_trading_date()
         
         date = date.replace('-', '')
         dt = datetime.strptime(date, '%Y%m%d')
         
         # 주말이면 금요일로
         if dt.weekday() == 5:
-            dt = dt - timedelta(days=1)
+            dt -= timedelta(days=1)
         elif dt.weekday() == 6:
-            dt = dt - timedelta(days=2)
+            dt -= timedelta(days=2)
         
         return dt.strftime('%Y%m%d')
     
